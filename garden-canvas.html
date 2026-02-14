@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Canvas Vine Garden</title>
+  <style>
+    :root{ --bg:#000; --fg:#33ff66; }
+    html,body{height:100%;}
+    body{ margin:0; background:var(--bg); overflow:hidden; }
+    canvas{ display:block; width:100vw; height:100vh; }
+    #hud{
+      position:fixed; left:12px; top:10px;
+      color:rgba(51,255,102,0.85);
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      text-shadow: 0 0 10px rgba(51,255,102,0.12);
+      user-select:none;
+    }
+    #hud kbd{border:1px solid rgba(51,255,102,0.35); padding:1px 6px; border-radius:8px;}
+  </style>
+</head>
+<body>
+  <div id="hud">
+    Canvas Vine Garden — <kbd>S</kbd> slow/fast · <kbd>H</kbd> hide HUD · <kbd>R</kbd> reset · <kbd>Space</kbd> burst
+  </div>
+  <canvas id="c"></canvas>
+
+<script>
+// Canvas Vine Garden
+// - black background, green vines drawing upward
+// - slow/fast mode toggle
+
+const LS_KEY = 'canvasGarden.v1';
+
+const cfg = {
+  bg: '#000000',
+  fg: '#33ff66',
+  fgDim: 'rgba(51,255,102,0.12)',
+  slow: true,
+  density: 28, // base vines
+};
+
+function now(){ return Date.now(); }
+function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
+
+function load(){
+  try{ const r = localStorage.getItem(LS_KEY); return r? JSON.parse(r): null; }catch{ return null; }
+}
+function save(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
+
+function xorshift(seed){
+  let x = seed|0;
+  return ()=>{
+    x ^= x << 13; x |= 0;
+    x ^= x >>> 17;
+    x ^= x << 5; x |= 0;
+    return (x >>> 0) / 4294967296;
+  };
+}
+
+function newState(){
+  const t = now();
+  return { createdAt: t, lastTickAt: t, vines: [], ticks: 0, w: 0, h: 0 };
+}
+
+function ensureVines(state, n){
+  while(state.vines.length < n){
+    const i = state.vines.length;
+    const seed = ((state.createdAt/1000)|0) ^ (i*2654435761);
+    const r = xorshift(seed);
+    state.vines.push({
+      seed,
+      r: null,
+      alive: true,
+      x: 0, y: 0,
+      vx: (r()<0.5?-1:1) * (0.15 + r()*0.55),
+      wav: 0.4 + r()*1.6,
+      phase: r()*Math.PI*2,
+      energy: 900 + Math.floor(r()*1200),
+      thickness: 0.8 + r()*1.7,
+      hueJitter: (r()-0.5)*14,
+      kind: r()<0.55? 'vine' : (r()<0.8? 'branch':'ivy'),
+    });
+  }
+}
+
+function resize(canvas, state){
+  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const w = Math.floor(window.innerWidth * dpr);
+  const h = Math.floor(window.innerHeight * dpr);
+  if(canvas.width !== w || canvas.height !== h){
+    canvas.width = w; canvas.height = h;
+  }
+  state.w = w; state.h = h;
+
+  // spread start points along bottom
+  const n = state.vines.length || 1;
+  state.vines.forEach((v,i)=>{
+    const r = v.r || (v.r = xorshift(v.seed));
+    v.x = clamp(((i+0.5) * w / n) + (r()-0.5)*w*0.04, 8, w-8);
+    v.y = h - (20 + r()*40);
+  });
+}
+
+function vineColor(v){
+  // keep it green but allow tiny jitter for depth
+  return `hsl(${120 + v.hueJitter}deg 100% 60%)`;
+}
+
+function drawGlow(ctx, x1,y1,x2,y2, alpha){
+  ctx.strokeStyle = `rgba(51,255,102,${alpha})`;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+}
+
+function tick(state, ctx){
+  const t = now();
+  const dtMs = Math.max(1, t - state.lastTickAt);
+  state.lastTickAt = t;
+
+  // slow vs fast: how many "growth steps" per tick
+  const baseSteps = cfg.slow ? 1 : 6;
+  const steps = baseSteps + Math.min(10, Math.floor(dtMs / (cfg.slow ? 120 : 40)));
+
+  // fade frame slightly (trails)
+  ctx.fillStyle = 'rgba(0,0,0,0.10)';
+  ctx.fillRect(0,0,state.w,state.h);
+
+  for(let i=0;i<state.vines.length;i++){
+    const v = state.vines[i];
+    if(!v.alive) continue;
+
+    const r = v.r || (v.r = xorshift(v.seed));
+
+    for(let s=0;s<steps;s++){
+      if(v.energy-- <= 0){ v.alive = false; break; }
+
+      const x1 = v.x, y1 = v.y;
+
+      // growth upward with slight lateral curl
+      const up = 0.8 + r()*1.6;
+      v.phase += 0.06 + r()*0.06;
+
+      const curl = Math.sin(v.phase) * v.wav;
+      v.x += v.vx * 0.7 + curl;
+      v.y -= up;
+
+      // bounds
+      if(v.x < 6 || v.x > state.w-6){ v.vx *= -1; v.x = clamp(v.x, 6, state.w-6); }
+      if(v.y < 10){ v.alive = false; break; }
+
+      // branching
+      if(v.kind === 'branch' && r() < (cfg.slow ? 0.003 : 0.010) && state.vines.length < 80){
+        const childSeed = (v.seed ^ (v.energy*1103515245))|0;
+        const cr = xorshift(childSeed);
+        state.vines.push({
+          seed: childSeed,
+          r: null,
+          alive: true,
+          x: v.x,
+          y: v.y,
+          vx: (cr()<0.5?-1:1) * (0.15 + cr()*0.55),
+          wav: 0.4 + cr()*1.6,
+          phase: cr()*Math.PI*2,
+          energy: 450 + Math.floor(cr()*900),
+          thickness: 0.7 + cr()*1.4,
+          hueJitter: (cr()-0.5)*14,
+          kind: cr()<0.5? 'vine' : 'ivy',
+        });
+      }
+
+      // draw segment
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // glow underlay
+      drawGlow(ctx, x1,y1, v.x,v.y, cfg.slow ? 0.05 : 0.08);
+
+      ctx.strokeStyle = vineColor(v);
+      ctx.lineWidth = v.thickness;
+      ctx.beginPath();
+      ctx.moveTo(x1,y1);
+      ctx.lineTo(v.x,v.y);
+      ctx.stroke();
+
+      // leaves / buds / flowers
+      const decoRoll = r();
+      if(decoRoll < (cfg.slow ? 0.010 : 0.030)){
+        ctx.fillStyle = 'rgba(51,255,102,0.95)';
+        ctx.fillRect(v.x + (r()<0.5?-2:2), v.y + (r()<0.5?-1:1), 2, 2);
+      } else if(decoRoll < (cfg.slow ? 0.012 : 0.036)){
+        ctx.fillStyle = 'rgba(255,122,217,0.9)';
+        ctx.fillRect(v.x, v.y, 2, 2);
+      }
+    }
+  }
+
+  state.ticks++;
+  if(state.ticks % (cfg.slow ? 30 : 12) === 0) save(state);
+}
+
+function reset(state, ctx){
+  const s = newState();
+  ensureVines(s, cfg.density);
+  resize(canvas, s);
+  // clear
+  ctx.fillStyle = cfg.bg;
+  ctx.fillRect(0,0,s.w,s.h);
+  save(s);
+  return s;
+}
+
+// Init
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.fillStyle = cfg.bg;
+ctx.fillRect(0,0,canvas.width, canvas.height);
+
+let state = load() || newState();
+ensureVines(state, cfg.density);
+resize(canvas, state);
+
+// URL param override: ?speed=fast
+try{
+  const sp = new URLSearchParams(location.search);
+  if(sp.get('speed') === 'fast') cfg.slow = false;
+  if(sp.get('speed') === 'slow') cfg.slow = true;
+}catch{}
+
+function setHud(){
+  const hud = document.getElementById('hud');
+  hud.textContent = `Canvas Vine Garden — mode:${cfg.slow?'slow':'fast'} — S toggle · H hide · R reset · Space burst`;
+}
+setHud();
+
+document.addEventListener('keydown', (e)=>{
+  const k = e.key.toLowerCase();
+  if(k === 'h'){
+    const hud = document.getElementById('hud');
+    hud.style.display = (hud.style.display === 'none') ? 'block' : 'none';
+  }
+  if(k === 's'){
+    cfg.slow = !cfg.slow;
+    setHud();
+  }
+  if(k === 'r'){
+    state = reset(state, ctx);
+  }
+  if(e.code === 'Space'){
+    // burst: add energy + add vines
+    for(const v of state.vines){ v.energy += 120; }
+    ensureVines(state, Math.min(60, state.vines.length + 10));
+  }
+});
+
+window.addEventListener('resize', ()=>resize(canvas, state));
+
+// render loop
+let last = now();
+function loop(){
+  tick(state, ctx);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
