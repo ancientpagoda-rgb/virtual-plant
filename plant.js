@@ -141,6 +141,16 @@ function drawPlant(stageIdx, state){
   const dark = health > 60 ? '#2ea84a' : (health > 35 ? '#7aa63b' : '#9a8e39');
   const flower = '#ff7ad9';
 
+  // Deterministic tiny RNG so each plant gets its own vine shape
+  let seed = Math.floor((state.createdAt || 0) / 1000) ^ 0x9e3779b9;
+  const rand = () => {
+    // xorshift32
+    seed ^= seed << 13; seed |= 0;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5; seed |= 0;
+    return ((seed >>> 0) / 4294967296);
+  };
+
   // Helper to place pixel blocks
   const px = (x,y,color)=>{
     const d=document.createElement('div');
@@ -186,7 +196,42 @@ function drawPlant(stageIdx, state){
     addLeaf(stemX, 7,   1);
   }
 
-  // Flower
+  // Vines (stage 5+): curling lines that trail off to the sides
+  if(stageIdx >= 4){
+    const vineColor = dark;
+    const vineLeaf = green;
+
+    const drawVine = (side /* -1 left, +1 right */) => {
+      // Start near mid-stem
+      let x = stemX + side*1;
+      let y = 12;
+      const length = 10 + Math.floor(rand()*6) + (stageIdx>=5 ? 4 : 0);
+
+      for(let i=0;i<length;i++){
+        // curl outward as it goes up
+        const drift = (rand() < 0.55) ? side : 0;
+        x = clamp(x + drift, 0, 21);
+        y = clamp(y - (rand() < 0.75 ? 1 : 0), 0, 18);
+
+        px(x, y, vineColor);
+
+        // occasional vine leaf
+        if(rand() < 0.33){
+          px(clamp(x + side,0,21), clamp(y + (rand()<0.5?0:1),0,19), vineLeaf);
+        }
+
+        // tiny blossoms on vines at max stage
+        if(stageIdx >= 5 && rand() < 0.10){
+          px(clamp(x,0,21), clamp(y-1,0,19), flower);
+        }
+      }
+    };
+
+    drawVine(-1);
+    drawVine(1);
+  }
+
+  // Flower (top)
   if(stageIdx >= 5){
     const topY = stemTop;
     px(stemX, topY-1, flower);
