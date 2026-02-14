@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Virtual Plant
+Comment=A tiny plant that grows with time
+Exec=/home/joe/.openclaw/workspace/virtual-plant/run-desktop.sh
+Icon=applications-games
+Terminal=false
+Categories=Game;Utility;
+StartupWMClass=VirtualPlant

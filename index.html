@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Virtual Plant</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="card">
+    <header class="header">
+      <h1>Virtual Plant</h1>
+      <div class="sub">Grows with time. Water it to keep it healthy.</div>
+    </header>
+
+    <section class="plant-area" aria-label="Plant display">
+      <div id="plant" class="plant" role="img" aria-label="Plant"></div>
+      <div class="ground"></div>
+    </section>
+
+    <section class="stats" aria-label="Plant stats">
+      <div class="stat"><span>Stage</span><strong id="stage">—</strong></div>
+      <div class="stat"><span>Age</span><strong id="age">—</strong></div>
+      <div class="stat"><span>Hydration</span><strong id="hydration">—</strong></div>
+      <div class="stat"><span>Health</span><strong id="health">—</strong></div>
+      <div class="stat"><span>Next growth</span><strong id="next">—</strong></div>
+    </section>
+
+    <section class="controls" aria-label="Controls">
+      <button id="waterBtn">Water</button>
+      <button id="sunBtn">Sun</button>
+      <button id="resetBtn" class="secondary">Reset</button>
+      <label class="toggle">
+        <input id="fastMode" type="checkbox" />
+        <span>Fast mode (demo)</span>
+      </label>
+    </section>
+
+    <footer class="footer">
+      <div id="msg" class="msg" aria-live="polite"></div>
+      <div class="hint">Tip: leave this page open or come back later—growth is computed from real time.</div>
+    </footer>
+  </main>
+
+  <script src="plant.js"></script>
+</body>
+</html>
