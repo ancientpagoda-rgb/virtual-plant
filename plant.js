@@ -128,7 +128,13 @@ function render(state){
   const eta = hoursToNext === Infinity ? '— (needs care)' : fmtDuration(hoursToNext * 3600 * 1000);
   document.getElementById('next').textContent = (stageIdx === STAGES.length-1) ? 'Max stage' : eta;
 
+  const asciiEnabled = !!window.__asciiMode;
+  drawAsciiPlant(stageIdx, state, asciiEnabled);
   drawPlant(stageIdx, state);
+
+  // Show/hide layers
+  document.getElementById('ascii').style.display = asciiEnabled ? 'block' : 'none';
+  document.getElementById('plant').style.opacity = asciiEnabled ? '0.12' : '1';
 }
 
 function drawPlant(stageIdx, state){
@@ -248,11 +254,86 @@ function drawPlant(stageIdx, state){
   }
 }
 
+function drawAsciiPlant(stageIdx, state, enabled){
+  const out = document.getElementById('ascii');
+  if(!enabled){
+    out.textContent = '';
+    return;
+  }
+
+  const W = 32, H = 18;
+  const grid = Array.from({length:H}, ()=>Array.from({length:W}, ()=> ' '));
+
+  const put = (x,y,ch)=>{
+    if(x<0||y<0||x>=W||y>=H) return;
+    grid[y][x] = ch;
+  };
+
+  // Pot + ground
+  const potTopY = 13;
+  for(let x=12;x<=19;x++) put(x,potTopY,'_');
+  put(11,potTopY+1,'/'); for(let x=12;x<=19;x++) put(x,potTopY+1,' '); put(20,potTopY+1,'\\');
+  put(11,potTopY+2,'|'); for(let x=12;x<=19;x++) put(x,potTopY+2,'#'); put(20,potTopY+2,'|');
+  put(12,potTopY+3,'\\'); for(let x=13;x<=18;x++) put(x,potTopY+3,'_'); put(19,potTopY+3,'/');
+
+  // Stem
+  const stemX = 16;
+  const stemTop = 11 - Math.min(stageIdx*2, 8);
+  for(let y=12; y>=stemTop; y--) put(stemX,y,'|');
+
+  // Leaves
+  const leaf = (y, dir)=>{
+    put(stemX+dir, y, dir<0?'<':'>');
+    put(stemX+dir*2, y, '-');
+  };
+  if(stageIdx>=1){ leaf(11,-1); leaf(10,1); }
+  if(stageIdx>=2){ leaf(9,-1); leaf(8,1); }
+  if(stageIdx>=3){ leaf(7,-1); leaf(6,1); }
+
+  // Vines
+  const seeded = Math.floor((state.createdAt||0)/1000);
+  const curl = (side)=>{
+    let x = stemX + side;
+    let y = 10;
+    const len = 8 + (stageIdx>=4?6:0) + (seeded%4);
+    for(let i=0;i<len;i++){
+      if(i%2===0) x += side;
+      if(i%3!==0) y -= 1;
+      put(x,y, side<0?'/':'\\');
+      if(i%4===0) put(x+side, y, '*');
+    }
+  };
+  if(stageIdx>=4){ curl(-1); curl(1); }
+
+  // Flower
+  if(stageIdx>=5){
+    put(stemX, stemTop-1, '@');
+    put(stemX-1, stemTop, '(');
+    put(stemX+1, stemTop, ')');
+  }
+
+  // UI frame vibe
+  const title = `VIRTUAL PLANT  stage:${stageIdx+1}/${STAGES.length}`;
+  for(let i=0;i<Math.min(W,title.length);i++) grid[0][i]=title[i];
+
+  out.textContent = grid.map(r=>r.join('')).join('\n');
+}
+
 function main(){
   const waterBtn = document.getElementById('waterBtn');
   const sunBtn = document.getElementById('sunBtn');
   const resetBtn = document.getElementById('resetBtn');
   const fastMode = document.getElementById('fastMode');
+  const asciiMode = document.getElementById('asciiMode');
+
+  // persist preference
+  const pref = localStorage.getItem('virtualPlant.asciiMode');
+  window.__asciiMode = (pref === null) ? true : (pref === '1');
+  asciiMode.checked = !!window.__asciiMode;
+  asciiMode.addEventListener('change', ()=>{
+    window.__asciiMode = asciiMode.checked;
+    localStorage.setItem('virtualPlant.asciiMode', window.__asciiMode ? '1' : '0');
+  });
 
   let state = loadState() || newPlant();
 

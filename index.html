@@ -14,7 +14,8 @@
     </header>
 
     <section class="plant-area" aria-label="Plant display">
-      <div id="plant" class="plant" role="img" aria-label="Plant"></div>
+      <pre id="ascii" class="ascii" aria-label="ASCII plant" tabindex="0"></pre>
+      <div id="plant" class="plant" role="img" aria-label="Pixel plant"></div>
       <div class="ground"></div>
     </section>
 
@@ -30,6 +31,10 @@
       <button id="waterBtn">Water</button>
       <button id="sunBtn">Sun</button>
       <button id="resetBtn" class="secondary">Reset</button>
+      <label class="toggle">
+        <input id="asciiMode" type="checkbox" />
+        <span>ASCII mode</span>
+      </label>
       <label class="toggle">
         <input id="fastMode" type="checkbox" />
         <span>Fast mode (demo)</span>
